@@ -3,64 +3,68 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>UNO Score Counter</title>
 
 <style>
 body{
   margin:0;
-  font-family:Arial;
-  background:#fafafa;
+  font-family:'Segoe UI',Arial;
+  background:linear-gradient(135deg,#ff5252,#ff9800);
+  min-height:100vh;
 }
 
-.container{
-  max-width:900px;
-  margin:auto;
+.container{max-width:900px;margin:auto;padding:16px}
+
+.card{
+  background:white;
+  border-radius:14px;
   padding:16px;
+  box-shadow:0 8px 20px rgba(0,0,0,.25);
 }
 
-h1,h2{text-align:center;}
+h1,h2{text-align:center;margin:0 0 10px}
 
-input,button{
+input,select,button{
+  padding:12px;
   width:100%;
-  padding:10px;
   margin:6px 0;
   font-size:16px;
+  border-radius:8px;
+  border:1px solid #ccc;
 }
 
 button{
   background:#ff5252;
   color:white;
   border:none;
-  border-radius:6px;
 }
 
-.secondary{background:#333;}
-.hidden{display:none;}
+.secondary{background:#333}
+.hidden{display:none}
 
+/* TABLE */
 table{
   width:100%;
   border-collapse:collapse;
   background:white;
+  border-radius:12px;
+  overflow:hidden;
 }
 
+th{background:#333;color:white}
 th,td{
-  border:1px solid #ddd;
   padding:10px;
   text-align:center;
+  border-bottom:1px solid #eee;
 }
 
-th{background:#333;color:white;}
-
 tfoot td{
-  background:#fff3cd;
+  background:#fff8e1;
   font-weight:bold;
 }
 
-.bonus{
-  background:#e3f2fd;
-  font-style:italic;
-}
+.bonus{background:#e3f2fd}
+.highest{background:#c8e6c9 !important;font-weight:bold}
 
 /* Floating Buttons */
 .fab{
@@ -70,11 +74,10 @@ tfoot td{
   height:60px;
   border-radius:50%;
   font-size:26px;
-  box-shadow:0 4px 10px rgba(0,0,0,.3);
+  box-shadow:0 4px 10px rgba(0,0,0,.4);
 }
-
-#roundBtn{bottom:20px;}
-#bonusBtn{bottom:95px;background:#2196f3;}
+#roundBtn{bottom:20px}
+#bonusBtn{bottom:95px;background:#2196f3}
 #newGameBtn{
   position:fixed;
   left:20px;
@@ -83,6 +86,25 @@ tfoot td{
   border-radius:25px;
 }
 
+/* MODAL */
+.modal{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.55);
+  display:none;
+  justify-content:center;
+  align-items:center;
+  z-index:1000;
+}
+.modal.show{display:flex}
+
+.modal-content{
+  background:white;
+  padding:20px;
+  border-radius:12px;
+  width:90%;
+  max-width:350px;
+}
 </style>
 </head>
 
@@ -90,9 +112,9 @@ tfoot td{
 
 <div class="container">
 
+<div class="card">
 <h1>UNO Score Counter</h1>
 
-<!-- SETUP -->
 <div id="setup">
 <h2>Game Setup</h2>
 
@@ -103,69 +125,70 @@ tfoot td{
 
 <button onclick="startGame()">Start Game</button>
 </div>
+</div>
 
-<!-- GAME -->
-<div id="game" class="hidden">
+<br>
 
+<div id="game" class="hidden card">
 <h2>Scoreboard</h2>
-
 <table id="scoreTable"></table>
-
 </div>
 
 </div>
 
 <button id="roundBtn" class="fab hidden" onclick="addRound()">+</button>
-<button id="bonusBtn" class="fab hidden" onclick="addBonus()">★</button>
+<button id="bonusBtn" class="fab hidden" onclick="openBonus()">★</button>
 <button id="newGameBtn" class="secondary hidden" onclick="newGame()">New Game</button>
 
+<!-- BONUS MODAL -->
+<div id="bonusModal" class="modal">
+  <div class="modal-content">
+    <h3>Add Bonus</h3>
+
+    <select id="bonusPlayer"></select>
+    <input id="bonusScore" type="number" placeholder="Bonus Score">
+
+    <button onclick="confirmBonus()">Add Bonus</button>
+    <button class="secondary" onclick="closeBonus()">Cancel</button>
+  </div>
+</div>
+
 <script>
-let players=[], totals=[], rounds=[], limitValue=0;
+let players=[], rows=[], totals=[], limitValue=0;
 
-/* STORAGE */
+/* ---------- STORAGE ---------- */
 function saveGame(){
-  localStorage.setItem("unoRace",JSON.stringify({
-    players, totals, rounds, limitValue
-  }));
+  localStorage.setItem("unoRace",
+    JSON.stringify({players,rows,limitValue}));
 }
-
 function loadGame(){
-  let data=localStorage.getItem("unoRace");
-  if(!data) return;
-
-  let g=JSON.parse(data);
+  let d=localStorage.getItem("unoRace");
+  if(!d) return;
+  let g=JSON.parse(d);
   players=g.players;
-  totals=g.totals;
-  rounds=g.rounds;
+  rows=g.rows;
   limitValue=g.limitValue;
-
   setupToGame();
   rebuild();
 }
 window.onload=loadGame;
 
-/* SETUP */
+/* ---------- SETUP ---------- */
 playerCount.oninput=()=>{
   playerInputs.innerHTML="";
-  for(let i=0;i<playerCount.value;i++){
-    playerInputs.innerHTML+=
-      `<input placeholder="Player ${i+1}" id="p${i}">`;
-  }
+  for(let i=0;i<playerCount.value;i++)
+    playerInputs.innerHTML+=`<input id="p${i}" placeholder="Player ${i+1}">`;
 }
 
 function startGame(){
-  if(!playerCount.value || !limit.value)
+  if(!playerCount.value||!limit.value)
     return alert("Fill all fields");
 
-  players=[];
-  totals=[];
-  rounds=[];
+  players=[]; rows=[];
   limitValue=parseInt(limit.value);
 
-  for(let i=0;i<playerCount.value;i++){
+  for(let i=0;i<playerCount.value;i++)
     players.push(document.getElementById("p"+i).value||"Player "+(i+1));
-    totals.push(0);
-  }
 
   setupToGame();
   buildTable();
@@ -180,87 +203,125 @@ function setupToGame(){
   newGameBtn.classList.remove("hidden");
 }
 
-/* TABLE */
+/* ---------- TABLE ---------- */
 function buildTable(){
   scoreTable.innerHTML="";
-
   let h="<tr><th>Round</th>";
   players.forEach(p=>h+=`<th>${p}</th>`);
-  h+="</tr>";
+  h+="<th></th></tr>";
   scoreTable.innerHTML+=h;
 
   let f="<tfoot><tr><td>Total</td>";
   players.forEach((p,i)=>f+=`<td id='t${i}'>0</td>`);
-  f+="</tr></tfoot>";
+  f+="<td></td></tr></tfoot>";
   scoreTable.innerHTML+=f;
 }
 
 function rebuild(){
   buildTable();
-
-  rounds.forEach((r,i)=>{
-    let row=scoreTable.insertRow(scoreTable.rows.length-1);
-    row.insertCell(0).innerText=r.label;
-    if(r.type==="bonus") row.classList.add("bonus");
-
-    r.scores.forEach(s=>{
-      row.insertCell().innerText=s;
-    });
-  });
-
-  totals.forEach((t,i)=>t=document.getElementById("t"+i).innerText=t);
+  rows.forEach((r,i)=>insertRow(r,i));
+  recalcTotals();
 }
 
-/* GAMEPLAY */
+/* ---------- ADD ROUND ---------- */
 function addRound(){
   let scores=[];
+  for(let i=0;i<players.length;i++){
+    let v=prompt(`Score for ${players[i]}`);
+    if(v===null) return;
+    scores.push(parseInt(v)||0);
+  }
+  rows.push({type:"round",scores});
+  insertRow(rows[rows.length-1],rows.length-1);
+  recalcTotals(); saveGame(); checkWinner();
+}
+
+/* ---------- BONUS ---------- */
+function openBonus(){
+  let sel=document.getElementById("bonusPlayer");
+  sel.innerHTML="";
   players.forEach((p,i)=>{
-    let v=parseInt(prompt(`Score for ${p}`,0))||0;
-    scores.push(v);
-    totals[i]+=v;
+    let o=document.createElement("option");
+    o.value=i; o.text=p;
+    sel.appendChild(o);
   });
-
-  rounds.push({type:"round",label:rounds.length+1,scores});
-  insertRow(rounds[rounds.length-1]);
-  updateTotals();
-  saveGame();
-  checkWinner();
+  bonusScore.value="";
+  bonusModal.classList.add("show");
 }
 
-function addBonus(){
-  let name=prompt("Enter player number (1-"+players.length+")");
-  let idx=parseInt(name)-1;
-  if(idx<0||idx>=players.length) return;
-
-  let val=parseInt(prompt("Bonus score"),0)||0;
-
-  let scores=players.map((p,i)=> i===idx?val:"");
-
-  totals[idx]+=val;
-
-  rounds.push({type:"bonus",label:"Bonus",scores});
-  insertRow(rounds[rounds.length-1],true);
-  updateTotals();
-  saveGame();
-  checkWinner();
+function closeBonus(){
+  bonusModal.classList.remove("show");
 }
 
-function insertRow(r,isBonus=false){
+function confirmBonus(){
+  let idx=parseInt(bonusPlayer.value);
+  let val=parseInt(bonusScore.value);
+  if(isNaN(val)) return alert("Enter bonus score");
+
+  let scores=players.map((p,i)=>i===idx?val:0);
+  rows.push({type:"bonus",scores});
+  insertRow(rows[rows.length-1],rows.length-1,true);
+
+  closeBonus();
+  recalcTotals(); saveGame(); checkWinner();
+}
+
+/* ---------- INSERT ROW ---------- */
+function insertRow(r,index,isBonus=false){
   let row=scoreTable.insertRow(scoreTable.rows.length-1);
-  row.insertCell(0).innerText=r.label;
   if(isBonus) row.classList.add("bonus");
 
-  r.scores.forEach(s=>{
-    row.insertCell().innerText=s;
+  let roundNumber =
+    r.type==="round"
+      ? rows.filter(x=>x.type==="round").length
+      : "Bonus";
+
+  row.insertCell(0).innerText=roundNumber;
+
+  r.scores.forEach((s,col)=>{
+    let cell=row.insertCell();
+    cell.innerText=s;
+    cell.onclick=()=>editCell(index,col);
   });
+
+  let del=row.insertCell();
+  del.innerHTML=`<button style="background:#d32f2f" onclick="deleteRow(${index})">X</button>`;
 }
 
-function updateTotals(){
+/* ---------- EDIT CELL ---------- */
+function editCell(r,c){
+  let cur=rows[r].scores[c];
+  let v=prompt("Edit score:",cur);
+  if(v===null) return;
+  rows[r].scores[c]=parseInt(v)||0;
+  rebuild(); saveGame(); checkWinner();
+}
+
+/* ---------- DELETE ROW ---------- */
+function deleteRow(i){
+  if(!confirm("Delete this row?"))return;
+  rows.splice(i,1);
+  rebuild(); saveGame();
+}
+
+/* ---------- TOTALS ---------- */
+function recalcTotals(){
+  totals=new Array(players.length).fill(0);
+  rows.forEach(r=>{
+    r.scores.forEach((s,i)=>totals[i]+=s);
+  });
+
+  let max=Math.max(...totals);
+
   totals.forEach((t,i)=>{
-    document.getElementById("t"+i).innerText=t;
+    let td=document.getElementById("t"+i);
+    td.innerText=t;
+    td.classList.remove("highest");
+    if(t===max && max>0) td.classList.add("highest");
   });
 }
 
+/* ---------- WINNER ---------- */
 function checkWinner(){
   totals.forEach((t,i)=>{
     if(t>=limitValue){
@@ -271,13 +332,14 @@ function checkWinner(){
   });
 }
 
-/* NEW GAME */
+/* ---------- NEW GAME ---------- */
 function newGame(){
-  if(!confirm("Start new game?")) return;
+  if(!confirm("Start new game?"))return;
   localStorage.removeItem("unoRace");
   location.reload();
 }
 </script>
+
 
 </body>
 </html>
